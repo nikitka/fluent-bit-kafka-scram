@@ -1,0 +1,63 @@
+version: '3.4'
+
+
+services:
+  create-topic-user:
+    image: confluentinc/cp-kafka:7.3.1
+    command: /scripts/create-user-topic.sh
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./conf:/conf:ro
+    depends_on:
+      - kafka-broker
+
+  consumer:
+    image: confluentinc/cp-kafka:7.3.1
+    command: /scripts/kafka-consume.sh
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./conf:/conf:ro
+    depends_on:
+      - kafka-broker
+
+  fluent-bit:
+    image: debian:bullseye-slim
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./conf:/conf:ro
+      - ./fluent-bit/packaging/packages/debian/bullseye/tmp/:/tmp/packages/:ro
+    command: /scripts/run-fluent-bit.sh
+    depends_on:
+      - kafka-broker
+
+  kafka-broker:
+    image: confluentinc/cp-kafka:7.3.1
+    depends_on:
+      - zookeeper
+    volumes:
+      - ./conf:/kafka-conf
+    environment:
+      KAFKA_LISTENERS: "PLAINTEXT://:9091, SASL_PLAINTEXT://:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,SASL_PLAINTEXT:SASL_PLAINTEXT"
+      KAFKA_SASL_ENABLED_MECHANISMS: SCRAM-SHA-256,SCRAM-SHA-512
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://:9091,SASL_PLAINTEXT://kafka-broker:9092"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OPTS: "-Djava.security.auth.login.config=/kafka-conf/kafka.jaas.conf"
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.1
+    volumes:
+      - ./conf:/kafka-conf/
+    environment:
+      ZOOKEEPER_CLIENT_PORT: "2181"
+      ZOOKEEPER_TICK_TIME: 2000
+      KAFKA_OPTS: -Djava.security.auth.login.config=/kafka-conf/zk.jaas.conf
+        -Dzookeeper.authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+        -Dzookeeper.allowSaslFailedClients=false
+        -Dzookeeper.requireClientAuthScheme=sasl
